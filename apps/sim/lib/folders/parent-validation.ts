@@ -44,3 +44,36 @@ export async function assertFolderParentValid(
 
   return null
 }
+
+/**
+ * Walks `parentId` up from `newParentId` toward the root, returning `true` if
+ * it ever reaches `folderId` (or revisits a folder, guarding against an
+ * already-corrupt chain) -- i.e. whether reparenting `folderId` under
+ * `newParentId` would create a cycle. Folder ids are globally unique (not
+ * scoped per resourceType), so this needs no resourceType filter.
+ */
+export async function checkFolderCircularReference(
+  folderId: string,
+  newParentId: string,
+  dbClient: DbOrTx = db
+): Promise<boolean> {
+  let currentParentId: string | null = newParentId
+  const visited = new Set<string>()
+
+  while (currentParentId) {
+    if (visited.has(currentParentId) || currentParentId === folderId) {
+      return true
+    }
+    visited.add(currentParentId)
+
+    const [parent] = await dbClient
+      .select({ parentId: folder.parentId })
+      .from(folder)
+      .where(eq(folder.id, currentParentId))
+      .limit(1)
+
+    currentParentId = parent?.parentId ?? null
+  }
+
+  return false
+}

@@ -35,7 +35,7 @@ import { useFolderMap } from '@/hooks/queries/folders'
 import { getFolderMap } from '@/hooks/queries/utils/folder-cache'
 import {
   isFolderOrAncestorLocked,
-  isWorkflowEffectivelyLocked,
+  isResourceEffectivelyLocked,
 } from '@/hooks/queries/utils/folder-tree'
 import { getWorkflows } from '@/hooks/queries/utils/workflow-cache'
 import { useUpdateWorkflow } from '@/hooks/queries/workflows'
@@ -79,7 +79,7 @@ export const WorkflowItem = memo(function WorkflowItem({
 
   const { data: foldersById = {} } = useFolderMap(workspaceId)
   const inheritedFolderLocked = isFolderOrAncestorLocked(workflow.folderId, foldersById)
-  const effectiveLocked = isWorkflowEffectivelyLocked(workflow, foldersById)
+  const effectiveLocked = isResourceEffectivelyLocked(workflow, foldersById)
 
   const { canDeleteWorkflows, canDeleteFolder } = useCanDelete({ workspaceId })
 

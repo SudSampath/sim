@@ -11,12 +11,10 @@ import {
   permissionsMock,
   permissionsMockFns,
   workflowsOrchestrationMockFns,
-  workflowsUtilsMock,
-  workflowsUtilsMockFns,
 } from '@sim/testing'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockLogger, mockDbRef } = vi.hoisted(() => {
+const { mockLogger, mockDbRef, mockCheckFolderCircularReference } = vi.hoisted(() => {
   const logger = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -29,6 +27,10 @@ const { mockLogger, mockDbRef } = vi.hoisted(() => {
   return {
     mockLogger: logger,
     mockDbRef: { current: null as any },
+    // Stands in for the real cycle-check the mocked performUpdateFolder below
+    // hand-simulates -- not tied to a real module export, just an internal
+    // test-double control lever for exercising the route's error handling.
+    mockCheckFolderCircularReference: vi.fn(),
   }
 })
 
@@ -53,7 +55,6 @@ vi.mock('@/lib/folders/orchestration', () => ({
   performDeleteFolder: workflowsOrchestrationMockFns.mockPerformDeleteFolder,
   performUpdateFolder: workflowsOrchestrationMockFns.mockPerformUpdateFolder,
 }))
-vi.mock('@/lib/workflows/utils', () => workflowsUtilsMock)
 
 import { DELETE, PUT } from '@/app/api/folders/[id]/route'
 
@@ -163,10 +164,7 @@ describe('Individual Folder API Route', () => {
       }
       if (
         params.parentId &&
-        (await workflowsUtilsMockFns.mockCheckForCircularReference(
-          params.folderId,
-          params.parentId
-        ))
+        (await mockCheckFolderCircularReference(params.folderId, params.parentId))
       ) {
         return {
           success: false,
@@ -186,7 +184,7 @@ describe('Individual Folder API Route', () => {
         },
       }
     })
-    workflowsUtilsMockFns.mockCheckForCircularReference.mockResolvedValue(false)
+    mockCheckFolderCircularReference.mockResolvedValue(false)
   })
 
   describe('PUT /api/folders/[id]', () => {
@@ -392,7 +390,7 @@ describe('Individual Folder API Route', () => {
         },
       })
 
-      workflowsUtilsMockFns.mockCheckForCircularReference.mockResolvedValue(true)
+      mockCheckFolderCircularReference.mockResolvedValue(true)
 
       const req = createMockRequest('PUT', {
         name: 'Updated Folder 3',
@@ -406,10 +404,7 @@ describe('Individual Folder API Route', () => {
 
       const data = await response.json()
       expect(data).toHaveProperty('error', 'Cannot create circular folder reference')
-      expect(workflowsUtilsMockFns.mockCheckForCircularReference).toHaveBeenCalledWith(
-        'folder-3',
-        'folder-1'
-      )
+      expect(mockCheckFolderCircularReference).toHaveBeenCalledWith('folder-3', 'folder-1')
     })
   })
 

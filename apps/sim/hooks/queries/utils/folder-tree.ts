@@ -99,12 +99,6 @@ export function isResourceEffectivelyLocked(
 }
 
 /**
- * @deprecated Use {@link isResourceEffectivelyLocked} — kept as a named alias
- * so existing workflow call sites read naturally.
- */
-export const isWorkflowEffectivelyLocked = isResourceEffectivelyLocked
-
-/**
  * Effective lock state for a folder as visible to the client. Mirrors the
  * server's `getFolderLockStatus(folderId)` (in `@sim/platform-authz/workflow`) but
  * reads from cached folder data instead of issuing DB walks. Treats an

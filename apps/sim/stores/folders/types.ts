@@ -14,9 +14,6 @@ export interface Folder {
   deletedAt?: Date | null
 }
 
-/** @deprecated Temporary compat alias for the generalized {@link Folder} type. */
-export type WorkflowFolder = Folder
-
 export interface FolderTreeNode extends Folder {
   children: FolderTreeNode[]
   level: number

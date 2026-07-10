@@ -8,7 +8,10 @@ import { generateId } from '@sim/utils/id'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { FolderResourceType } from '@/lib/api/contracts/folders'
 import type { DbOrTx } from '@/lib/db/types'
-import { assertFolderParentValid } from '@/lib/folders/parent-validation'
+import {
+  assertFolderParentValid,
+  checkFolderCircularReference,
+} from '@/lib/folders/parent-validation'
 import { collectDescendantFolderIds } from '@/lib/folders/subtree'
 import {
   archiveWorkspaceFileFolderRecursive,
@@ -90,6 +93,7 @@ export interface PerformRestoreFolderParams {
 export interface PerformRestoreFolderResult {
   success: boolean
   error?: string
+  errorCode?: OrchestrationErrorCode
   restoredItems?: {
     folders: number
     workflows?: number
@@ -610,8 +614,12 @@ async function performRestoreResourceFolder<TCountKey extends 'knowledgeBases' |
     return { kind: 'ok' as const, stats, name: raw.name }
   })
 
-  if (outcome.kind === 'not_found') return { success: false, error: 'Folder not found' }
-  if (outcome.kind === 'not_archived') return { success: false, error: 'Folder is not archived' }
+  if (outcome.kind === 'not_found') {
+    return { success: false, error: 'Folder not found', errorCode: 'not_found' }
+  }
+  if (outcome.kind === 'not_archived') {
+    return { success: false, error: 'Folder is not archived', errorCode: 'validation' }
+  }
 
   const { stats, name } = outcome
 
@@ -697,6 +705,15 @@ export async function performUpdateFolder(
       resourceType: params.resourceType,
     })
     if (parentError) return { success: false, ...parentError }
+
+    const wouldCreateCycle = await checkFolderCircularReference(params.folderId, params.parentId)
+    if (wouldCreateCycle) {
+      return {
+        success: false,
+        error: 'Cannot create circular folder reference',
+        errorCode: 'validation',
+      }
+    }
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() }
@@ -766,7 +783,13 @@ export async function performReorderFolders(
   const existingFolders = await db
     .select({ id: folderTable.id, workspaceId: folderTable.workspaceId })
     .from(folderTable)
-    .where(and(inArray(folderTable.id, folderIds), eq(folderTable.resourceType, resourceType)))
+    .where(
+      and(
+        inArray(folderTable.id, folderIds),
+        eq(folderTable.resourceType, resourceType),
+        isNull(folderTable.deletedAt)
+      )
+    )
 
   const validIds = new Set(
     existingFolders.filter((f) => f.workspaceId === workspaceId).map((f) => f.id)

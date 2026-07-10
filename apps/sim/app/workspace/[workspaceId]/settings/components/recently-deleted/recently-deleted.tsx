@@ -28,7 +28,7 @@ import { useRestoreTable, useTablesList } from '@/hooks/queries/tables'
 import { useRestoreWorkflow, useWorkflows } from '@/hooks/queries/workflows'
 import { useRestoreWorkspaceFile, useWorkspaceFiles } from '@/hooks/queries/workspace-files'
 import { useFolderStore } from '@/stores/folders/store'
-import type { WorkflowFolder } from '@/stores/folders/types'
+import type { Folder as FolderType } from '@/stores/folders/types'
 
 type ResourceType =
   | 'all'
@@ -385,10 +385,10 @@ export function RecentlyDeleted() {
   function handleView(resource: DeletedResource) {
     if (resource.type === 'folder') {
       const setExpanded = useFolderStore.getState().setExpanded
-      const byId = new Map<string, WorkflowFolder>()
+      const byId = new Map<string, FolderType>()
       for (const folder of foldersQuery.data ?? []) byId.set(folder.id, folder)
       for (const folder of activeFoldersQuery.data ?? []) byId.set(folder.id, folder)
-      let current: WorkflowFolder | undefined = byId.get(resource.id)
+      let current: FolderType | undefined = byId.get(resource.id)
       const seen = new Set<string>()
       while (current && !seen.has(current.id)) {
         seen.add(current.id)

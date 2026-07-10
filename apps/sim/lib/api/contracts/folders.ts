@@ -72,13 +72,15 @@ export const duplicateFolderBodySchema = z.object({
 
 export const reorderFoldersBodySchema = z.object({
   workspaceId: z.string(),
-  updates: z.array(
-    z.object({
-      id: z.string(),
-      sortOrder: z.number().int().min(0),
-      parentId: z.string().nullable().optional(),
-    })
-  ),
+  updates: z
+    .array(
+      z.object({
+        id: z.string(),
+        sortOrder: z.number().int().min(0),
+        parentId: z.string().nullable().optional(),
+      })
+    )
+    .max(1000, 'At most 1000 folders can be reordered at once'),
 })
 
 export const listFoldersContract = defineRouteContract({

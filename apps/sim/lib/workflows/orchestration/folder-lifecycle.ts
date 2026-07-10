@@ -6,10 +6,12 @@ import { assertFolderMutable, ResourceLockedError } from '@sim/platform-authz/re
 import { getPostgresErrorCode } from '@sim/utils/errors'
 import { generateId } from '@sim/utils/id'
 import { and, eq, inArray, isNull, min } from 'drizzle-orm'
-import { assertFolderParentValid } from '@/lib/folders/parent-validation'
+import {
+  assertFolderParentValid,
+  checkFolderCircularReference,
+} from '@/lib/folders/parent-validation'
 import { archiveWorkflowsByIdsInWorkspace } from '@/lib/workflows/lifecycle'
 import type { OrchestrationErrorCode } from '@/lib/workflows/orchestration/types'
-import { checkForCircularReference } from '@/lib/workflows/utils'
 
 const logger = createLogger('FolderLifecycle')
 
@@ -168,7 +170,7 @@ export async function performUpdateFolder(
       })
       if (parentError) return { success: false, ...parentError }
 
-      const wouldCreateCycle = await checkForCircularReference(params.folderId, params.parentId)
+      const wouldCreateCycle = await checkFolderCircularReference(params.folderId, params.parentId)
       if (wouldCreateCycle) {
         return {
           success: false,
@@ -458,6 +460,7 @@ export interface PerformRestoreFolderParams {
 export interface PerformRestoreFolderResult {
   success: boolean
   error?: string
+  errorCode?: OrchestrationErrorCode
   restoredItems?: { folders: number; workflows: number }
 }
 
@@ -476,7 +479,7 @@ export async function performRestoreFolder(
     .where(and(eq(folder.id, folderId), eq(folder.workspaceId, workspaceId), isWorkflowFolder))
 
   if (!existingFolder) {
-    return { success: false, error: 'Folder not found' }
+    return { success: false, error: 'Folder not found', errorCode: 'not_found' }
   }
 
   if (!existingFolder.deletedAt) {

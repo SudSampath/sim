@@ -7,11 +7,11 @@ import {
   getFolderPath,
   isFolderEffectivelyLocked,
   isFolderOrAncestorLocked,
-  isWorkflowEffectivelyLocked,
+  isResourceEffectivelyLocked,
 } from '@/hooks/queries/utils/folder-tree'
-import type { WorkflowFolder } from '@/stores/folders/types'
+import type { Folder } from '@/stores/folders/types'
 
-function makeFolder(overrides: Partial<WorkflowFolder> & { id: string }): WorkflowFolder {
+function makeFolder(overrides: Partial<Folder> & { id: string }): Folder {
   return {
     id: overrides.id,
     name: overrides.name ?? overrides.id,
@@ -146,14 +146,14 @@ describe('findLockedAncestorFolder', () => {
   })
 })
 
-describe('isWorkflowEffectivelyLocked', () => {
+describe('isResourceEffectivelyLocked', () => {
   it('treats undefined or null workflows as unlocked', () => {
-    expect(isWorkflowEffectivelyLocked(undefined, {})).toBe(false)
-    expect(isWorkflowEffectivelyLocked(null, {})).toBe(false)
+    expect(isResourceEffectivelyLocked(undefined, {})).toBe(false)
+    expect(isResourceEffectivelyLocked(null, {})).toBe(false)
   })
 
   it('returns true when the workflow row itself is locked', () => {
-    expect(isWorkflowEffectivelyLocked({ locked: true, folderId: null }, {})).toBe(true)
+    expect(isResourceEffectivelyLocked({ locked: true, folderId: null }, {})).toBe(true)
   })
 
   it('returns true when an ancestor folder is locked', () => {
@@ -161,16 +161,16 @@ describe('isWorkflowEffectivelyLocked', () => {
       eng: makeFolder({ id: 'eng', locked: true }),
       be: makeFolder({ id: 'be', parentId: 'eng' }),
     }
-    expect(isWorkflowEffectivelyLocked({ locked: false, folderId: 'be' }, folders)).toBe(true)
+    expect(isResourceEffectivelyLocked({ locked: false, folderId: 'be' }, folders)).toBe(true)
   })
 
   it('returns false when neither row nor any ancestor is locked', () => {
     const folders = { eng: makeFolder({ id: 'eng' }) }
-    expect(isWorkflowEffectivelyLocked({ locked: false, folderId: 'eng' }, folders)).toBe(false)
+    expect(isResourceEffectivelyLocked({ locked: false, folderId: 'eng' }, folders)).toBe(false)
   })
 
   it('returns false for a workflow at workspace root with no row lock', () => {
-    expect(isWorkflowEffectivelyLocked({ locked: false, folderId: null }, {})).toBe(false)
+    expect(isResourceEffectivelyLocked({ locked: false, folderId: null }, {})).toBe(false)
   })
 })
 

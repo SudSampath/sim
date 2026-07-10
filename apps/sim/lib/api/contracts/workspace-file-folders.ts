@@ -16,8 +16,8 @@ const workspaceFileFoldersSuccessSchema = z.object({
 
 export const moveWorkspaceFileItemsBodySchema = z
   .object({
-    fileIds: z.array(z.string()).default([]),
-    folderIds: z.array(z.string()).default([]),
+    fileIds: z.array(z.string()).max(100, 'At most 100 files can be moved at once').default([]),
+    folderIds: z.array(z.string()).max(100, 'At most 100 folders can be moved at once').default([]),
     targetFolderId: z.string().nullable().optional(),
   })
   .refine((body) => body.fileIds.length > 0 || body.folderIds.length > 0, {
@@ -26,8 +26,11 @@ export const moveWorkspaceFileItemsBodySchema = z
 
 export const bulkArchiveWorkspaceFileItemsBodySchema = z
   .object({
-    fileIds: z.array(z.string()).default([]),
-    folderIds: z.array(z.string()).default([]),
+    fileIds: z.array(z.string()).max(100, 'At most 100 files can be deleted at once').default([]),
+    folderIds: z
+      .array(z.string())
+      .max(100, 'At most 100 folders can be deleted at once')
+      .default([]),
   })
   .refine((body) => body.fileIds.length > 0 || body.folderIds.length > 0, {
     message: 'At least one file or folder must be selected',

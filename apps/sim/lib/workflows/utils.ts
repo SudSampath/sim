@@ -3,7 +3,7 @@ import { folder as workflowFolder, workflow as workflowTable } from '@sim/db/sch
 import { createLogger } from '@sim/logger'
 import { authorizeWorkflowByWorkspacePermission } from '@sim/platform-authz/workflow'
 import { generateId } from '@sim/utils/id'
-import { and, asc, eq, inArray, isNull, max, min, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, min, sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { ensureWorkflowAliasBacking } from '@/lib/copilot/vfs/workflow-alias-backing'
@@ -492,54 +492,6 @@ export async function setWorkflowVariables(workflowId: string, variables: Record
 
 // ── Folder CRUD ──
 
-export interface CreateFolderInput {
-  userId: string
-  workspaceId: string
-  name: string
-  parentId?: string | null
-}
-
-export async function createFolderRecord(params: CreateFolderInput) {
-  const { userId, workspaceId, name, parentId = null } = params
-
-  const [maxResult] = await db
-    .select({ maxOrder: max(workflowFolder.sortOrder) })
-    .from(workflowFolder)
-    .where(
-      and(
-        eq(workflowFolder.workspaceId, workspaceId),
-        eq(workflowFolder.resourceType, 'workflow'),
-        parentId ? eq(workflowFolder.parentId, parentId) : isNull(workflowFolder.parentId)
-      )
-    )
-  const sortOrder = (maxResult?.maxOrder ?? 0) + 1
-
-  const folderId = generateId()
-  await db.insert(workflowFolder).values({
-    id: folderId,
-    resourceType: 'workflow',
-    userId,
-    workspaceId,
-    parentId,
-    name,
-    sortOrder,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  })
-
-  return { folderId, name, workspaceId, parentId }
-}
-
-export async function updateFolderRecord(
-  folderId: string,
-  updates: { name?: string; parentId?: string | null }
-) {
-  const setData: Record<string, unknown> = { updatedAt: new Date() }
-  if (updates.name !== undefined) setData.name = updates.name
-  if (updates.parentId !== undefined) setData.parentId = updates.parentId
-  await db.update(workflowFolder).set(setData).where(eq(workflowFolder.id, folderId))
-}
-
 export async function verifyFolderWorkspace(
   folderId: string,
   workspaceId: string
@@ -556,60 +508,6 @@ export async function verifyFolderWorkspace(
     )
     .limit(1)
   return Boolean(row)
-}
-
-export async function deleteFolderRecord(folderId: string): Promise<boolean> {
-  const [folder] = await db
-    .select({ parentId: workflowFolder.parentId })
-    .from(workflowFolder)
-    .where(eq(workflowFolder.id, folderId))
-    .limit(1)
-
-  if (!folder) return false
-
-  await db
-    .update(workflowTable)
-    .set({ folderId: folder.parentId, updatedAt: new Date() })
-    .where(eq(workflowTable.folderId, folderId))
-
-  await db
-    .update(workflowFolder)
-    .set({ parentId: folder.parentId, updatedAt: new Date() })
-    .where(eq(workflowFolder.parentId, folderId))
-
-  await db.delete(workflowFolder).where(eq(workflowFolder.id, folderId))
-
-  return true
-}
-
-/**
- * Checks whether setting `parentId` as the parent of `folderId` would
- * create a circular reference in the folder tree.
- */
-export async function checkForCircularReference(
-  folderId: string,
-  parentId: string
-): Promise<boolean> {
-  let currentParentId: string | null = parentId
-  const visited = new Set<string>()
-
-  while (currentParentId) {
-    if (visited.has(currentParentId) || currentParentId === folderId) {
-      return true
-    }
-
-    visited.add(currentParentId)
-
-    const [parent] = await db
-      .select({ parentId: workflowFolder.parentId })
-      .from(workflowFolder)
-      .where(eq(workflowFolder.id, currentParentId))
-      .limit(1)
-
-    currentParentId = parent?.parentId || null
-  }
-
-  return false
 }
 
 export async function listFolders(workspaceId: string) {
