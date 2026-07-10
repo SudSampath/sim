@@ -132,6 +132,49 @@ describe('PUT /api/folders/reorder', () => {
     expect(mockDb.transaction).not.toHaveBeenCalled()
   })
 
+  it('rejects the whole batch when one folder id in a multi-item request is not found', async () => {
+    // Regression test: previously a request mixing a valid and an invalid/missing
+    // id would silently reorder only the valid one and report success with a
+    // smaller `updated` count, giving no indication the other entry was skipped.
+    mockWhere.mockReturnValueOnce([
+      { id: 'folder-1', workspaceId: 'workspace-123', resourceType: 'workflow' },
+    ])
+
+    const req = createMockRequest('PUT', {
+      workspaceId: 'workspace-123',
+      updates: [
+        { id: 'folder-1', sortOrder: 0, parentId: null },
+        { id: 'folder-missing', sortOrder: 1, parentId: null },
+      ],
+    })
+
+    const response = await PUT(req)
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe('One or more folders were not found')
+    expect(mockDb.transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects a soft-deleted folder id rather than silently reordering it', async () => {
+    // Regression test: the route's own existing-folder lookup previously had no
+    // deletedAt filter, so a soft-deleted folder id would pass validation and
+    // have its sortOrder/parentId mutated by a stale or direct API request.
+    mockWhere.mockReturnValueOnce([])
+
+    const req = createMockRequest('PUT', {
+      workspaceId: 'workspace-123',
+      updates: [{ id: 'folder-deleted', sortOrder: 0, parentId: null }],
+    })
+
+    const response = await PUT(req)
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe('One or more folders were not found')
+    expect(mockDb.transaction).not.toHaveBeenCalled()
+  })
+
   it('rejects a batch that would form a cycle', async () => {
     mockWhere
       .mockReturnValueOnce([

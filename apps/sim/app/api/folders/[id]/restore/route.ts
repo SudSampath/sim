@@ -52,7 +52,12 @@ export const POST = withRouteHandler(async (request: NextRequest, context: Route
     })
 
     if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
+      // Only 'not_found' gets its own status here -- the other restore-failure
+      // shapes (validation, and file-folder's name-conflict case which omits
+      // errorCode) all read naturally as 400, matching this route's prior
+      // behavior for everything except "not found".
+      const status = result.errorCode === 'not_found' ? 404 : 400
+      return NextResponse.json({ error: result.error }, { status })
     }
 
     logger.info(`Restored folder ${folderId}`, { restoredItems: result.restoredItems })

@@ -794,8 +794,15 @@ export async function performReorderFolders(
   const validIds = new Set(
     existingFolders.filter((f) => f.workspaceId === workspaceId).map((f) => f.id)
   )
-  const validUpdates = updates.filter((u) => validIds.has(u.id))
-  if (validUpdates.length === 0) return { success: false, updated: 0 }
+  // Any id that doesn't resolve to an existing, active, same-workspace folder (wrong
+  // workspace, wrong resourceType, or soft-deleted) fails the whole batch up front --
+  // matching the parentId check below -- rather than silently reordering a subset and
+  // reporting success with a smaller `updated` count.
+  const invalidId = updates.find((u) => !validIds.has(u.id))
+  if (invalidId) {
+    return { success: false, updated: 0, error: 'One or more folders were not found' }
+  }
+  const validUpdates = updates
 
   // Reparents also need `assertFolderParentValid` on the new parent (the
   // `validIds` check above only validates `id`). Any invalid parentId fails

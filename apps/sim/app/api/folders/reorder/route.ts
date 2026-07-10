@@ -2,7 +2,7 @@ import { db } from '@sim/db'
 import { folder } from '@sim/db/schema'
 import { createLogger } from '@sim/logger'
 import { ResourceLockedError } from '@sim/platform-authz/resource-lock'
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { type NextRequest, NextResponse } from 'next/server'
 import { reorderFoldersContract } from '@/lib/api/contracts'
 import { parseRequest } from '@/lib/api/server'
@@ -45,17 +45,20 @@ export const PUT = withRouteHandler(async (req: NextRequest) => {
         resourceType: folder.resourceType,
       })
       .from(folder)
-      .where(inArray(folder.id, folderIds))
+      .where(and(inArray(folder.id, folderIds), isNull(folder.deletedAt)))
 
     const validRows = existingFolders.filter((f) => f.workspaceId === workspaceId)
     const validIds = new Set(validRows.map((f) => f.id))
     const resourceTypeById = new Map(validRows.map((f) => [f.id, f.resourceType]))
 
-    const validUpdates = updates.filter((u) => validIds.has(u.id))
-
-    if (validUpdates.length === 0) {
-      return NextResponse.json({ error: 'No valid folders to update' }, { status: 400 })
+    // Any id that doesn't resolve to an existing, active, same-workspace folder fails
+    // the whole batch up front rather than silently reordering a subset and reporting
+    // success with a smaller `updated` count.
+    const hasInvalidId = updates.some((u) => !validIds.has(u.id))
+    if (hasInvalidId) {
+      return NextResponse.json({ error: 'One or more folders were not found' }, { status: 400 })
     }
+    const validUpdates = updates
 
     // A single reorder call operates on one resourceType at a time (the UI never mixes
     // folder types in one drag-drop tree). Reject a mixed-type batch explicitly instead
