@@ -89,7 +89,13 @@ export const PUT = withRouteHandler(async (req: NextRequest) => {
     const workspaceFolders = await db
       .select({ id: folder.id, parentId: folder.parentId })
       .from(folder)
-      .where(eq(folder.workspaceId, workspaceId))
+      .where(
+        and(
+          eq(folder.workspaceId, workspaceId),
+          eq(folder.resourceType, resourceType),
+          isNull(folder.deletedAt)
+        )
+      )
 
     const parentById = new Map<string, string | null>()
     for (const folderRow of workspaceFolders) {

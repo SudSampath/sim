@@ -77,6 +77,36 @@ describe('PUT /api/folders/reorder', () => {
     expect(data).toMatchObject({ success: true, updated: 1 })
   })
 
+  it('scopes the cycle-detection graph to the batch resourceType and excludes soft-deleted folders', async () => {
+    // Regression test: the workspaceFolders query used to build the cycle-check
+    // graph previously fetched every folder in the workspace regardless of
+    // resourceType or deletedAt -- unrelated trees and deleted nodes could
+    // pollute the ancestor walk and produce a false "circular reference" error.
+    mockWhere
+      .mockReturnValueOnce([
+        { id: 'folder-1', workspaceId: 'workspace-123', resourceType: 'workflow' },
+      ])
+      .mockReturnValueOnce([{ id: 'folder-1', parentId: null }])
+      .mockReturnValueOnce([{ id: 'folder-1', workspaceId: 'workspace-123' }])
+
+    const req = createMockRequest('PUT', {
+      workspaceId: 'workspace-123',
+      updates: [{ id: 'folder-1', sortOrder: 2, parentId: null }],
+    })
+
+    await PUT(req)
+
+    const workspaceFoldersCondition = mockWhere.mock.calls[1][0]
+    expect(workspaceFoldersCondition).toMatchObject({
+      type: 'and',
+      conditions: expect.arrayContaining([
+        { type: 'eq', left: expect.anything(), right: 'workspace-123' },
+        { type: 'eq', left: expect.anything(), right: 'workflow' },
+        { type: 'isNull', column: expect.anything() },
+      ]),
+    })
+  })
+
   it('rejects a parentId that belongs to another workspace, failing the whole batch', async () => {
     // Parent-id validity is checked once, inside `performReorderFolders`
     // (via `assertFolderParentValid`) — the route no longer re-implements
