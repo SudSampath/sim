@@ -822,16 +822,47 @@ export async function performReorderFolders(
     return { success: false, updated: 0, error: firstParentError.error }
   }
 
-  await db.transaction(async (tx) => {
-    for (const update of validUpdates) {
-      const updateData: Record<string, unknown> = {
-        sortOrder: update.sortOrder,
-        updatedAt: new Date(),
+  try {
+    await db.transaction(async (tx) => {
+      // Re-check each target parent is still active inside the transaction --
+      // assertFolderParentValid above only reads at validation time, so a parent
+      // concurrently soft-deleted before this transaction opens could otherwise
+      // leave an active folder pointing at a deleted one.
+      if (targetParentIds.length > 0) {
+        const activeParents = await tx
+          .select({ id: folderTable.id })
+          .from(folderTable)
+          .where(and(inArray(folderTable.id, targetParentIds), isNull(folderTable.deletedAt)))
+        if (activeParents.length !== targetParentIds.length) {
+          throw new Error('Parent folder not found')
+        }
       }
-      if (update.parentId !== undefined) updateData.parentId = update.parentId || null
-      await tx.update(folderTable).set(updateData).where(eq(folderTable.id, update.id))
-    }
-  })
+
+      for (const update of validUpdates) {
+        const updateData: Record<string, unknown> = {
+          sortOrder: update.sortOrder,
+          updatedAt: new Date(),
+        }
+        if (update.parentId !== undefined) updateData.parentId = update.parentId || null
+
+        // Re-check deletedAt at write time (not just the validation read above) --
+        // without this, a folder concurrently soft-deleted between validation and
+        // this transaction could still have its sortOrder/parentId mutated. Throwing
+        // rolls back the whole transaction rather than silently applying a partial
+        // batch, matching this function's fail-whole-batch behavior on other errors.
+        const [updated] = await tx
+          .update(folderTable)
+          .set(updateData)
+          .where(and(eq(folderTable.id, update.id), isNull(folderTable.deletedAt)))
+          .returning({ id: folderTable.id })
+        if (!updated) {
+          throw new Error('One or more folders were not found')
+        }
+      }
+    })
+  } catch (error) {
+    return { success: false, updated: 0, error: toError(error).message }
+  }
 
   return { success: true, updated: validUpdates.length }
 }

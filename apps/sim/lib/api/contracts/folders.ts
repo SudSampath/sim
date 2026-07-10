@@ -80,6 +80,7 @@ export const reorderFoldersBodySchema = z.object({
         parentId: z.string().nullable().optional(),
       })
     )
+    .min(1, 'At least one folder must be provided')
     .max(1000, 'At most 1000 folders can be reordered at once'),
 })
 

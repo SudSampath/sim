@@ -39,6 +39,7 @@ describe('PUT /api/folders/reorder', () => {
   const mockWhere = vi.fn()
   const mockLimit = vi.fn()
   const mockTxUpdate = vi.fn()
+  const mockTxSelect = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -50,10 +51,17 @@ describe('PUT /api/folders/reorder', () => {
     mockFrom.mockReturnValue({ where: mockWhere })
 
     mockTxUpdate.mockReturnValue({
-      set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 'folder-1' }]),
+        }),
+      }),
+    })
+    mockTxSelect.mockReturnValue({
+      from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
     })
     mockDb.transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
-      cb({ update: mockTxUpdate })
+      cb({ update: mockTxUpdate, select: mockTxSelect })
     )
   })
 
@@ -203,6 +211,50 @@ describe('PUT /api/folders/reorder', () => {
     const data = await response.json()
     expect(data.error).toBe('One or more folders were not found')
     expect(mockDb.transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty updates array', async () => {
+    // Regression test: an empty `updates` array previously passed contract
+    // validation and crashed the route (validUpdates[0] was undefined) instead
+    // of failing cleanly.
+    const req = createMockRequest('PUT', { workspaceId: 'workspace-123', updates: [] })
+
+    const response = await PUT(req)
+
+    expect(response.status).toBe(400)
+    expect(mockDb.transaction).not.toHaveBeenCalled()
+  })
+
+  it('rolls back the whole batch when a folder is concurrently deleted before the write', async () => {
+    // Regression test: the transactional write previously only filtered by id,
+    // so a folder soft-deleted between validation and the transaction could
+    // still have its sortOrder/parentId mutated. The write-time recheck should
+    // find no matching row and roll back rather than silently applying it.
+    mockWhere
+      .mockReturnValueOnce([
+        { id: 'folder-1', workspaceId: 'workspace-123', resourceType: 'workflow' },
+      ])
+      .mockReturnValueOnce([{ id: 'folder-1', parentId: null }])
+      .mockReturnValueOnce([{ id: 'folder-1', workspaceId: 'workspace-123' }])
+
+    mockTxUpdate.mockReturnValue({
+      set: vi.fn().mockReturnValue({
+        where: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]), // row no longer matches (deletedAt set)
+        }),
+      }),
+    })
+
+    const req = createMockRequest('PUT', {
+      workspaceId: 'workspace-123',
+      updates: [{ id: 'folder-1', sortOrder: 2, parentId: null }],
+    })
+
+    const response = await PUT(req)
+
+    expect(response.status).toBe(400)
+    const data = await response.json()
+    expect(data.error).toBe('One or more folders were not found')
   })
 
   it('rejects a batch that would form a cycle', async () => {
