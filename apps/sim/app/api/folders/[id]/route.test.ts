@@ -10,7 +10,6 @@ import {
   type MockUser,
   permissionsMock,
   permissionsMockFns,
-  workflowsOrchestrationMock,
   workflowsOrchestrationMockFns,
   workflowsUtilsMock,
   workflowsUtilsMockFns,
@@ -50,7 +49,10 @@ vi.mock('@sim/db', () => ({
     return mockDbRef.current
   },
 }))
-vi.mock('@/lib/workflows/orchestration', () => workflowsOrchestrationMock)
+vi.mock('@/lib/folders/orchestration', () => ({
+  performDeleteFolder: workflowsOrchestrationMockFns.mockPerformDeleteFolder,
+  performUpdateFolder: workflowsOrchestrationMockFns.mockPerformUpdateFolder,
+}))
 vi.mock('@/lib/workflows/utils', () => workflowsUtilsMock)
 
 import { DELETE, PUT } from '@/app/api/folders/[id]/route'
@@ -70,11 +72,11 @@ const TEST_USER: MockUser = {
 
 const mockFolder = {
   id: 'folder-1',
+  resourceType: 'workflow',
   name: 'Test Folder',
   userId: TEST_USER.id,
   workspaceId: 'workspace-123',
   parentId: null,
-  color: '#6B7280',
   sortOrder: 1,
   createdAt: new Date('2024-01-01T00:00:00Z'),
   updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -178,9 +180,7 @@ describe('Individual Folder API Route', () => {
           ...mockFolder,
           id: params.folderId,
           name: params.name !== undefined ? params.name.trim() : 'Updated Folder',
-          color: params.color ?? mockFolder.color,
           parentId: params.parentId ?? mockFolder.parentId,
-          isExpanded: params.isExpanded,
           sortOrder: params.sortOrder ?? mockFolder.sortOrder,
           updatedAt: new Date(),
         },
@@ -195,7 +195,6 @@ describe('Individual Folder API Route', () => {
 
       const req = createMockRequest('PUT', {
         name: 'Updated Folder Name',
-        color: '#FF0000',
       })
       const params = Promise.resolve({ id: 'folder-1' })
 
@@ -386,6 +385,7 @@ describe('Individual Folder API Route', () => {
       mockDbRef.current = createFolderDbMock({
         folderLookupResult: {
           id: 'folder-3',
+          resourceType: 'workflow',
           parentId: null,
           name: 'Folder 3',
           workspaceId: 'workspace-123',
@@ -432,6 +432,7 @@ describe('Individual Folder API Route', () => {
       expect(data).toHaveProperty('success', true)
       expect(data).toHaveProperty('deletedItems')
       expect(mockPerformDeleteFolder).toHaveBeenCalledWith({
+        resourceType: 'workflow',
         folderId: 'folder-1',
         workspaceId: 'workspace-123',
         userId: TEST_USER.id,

@@ -18,8 +18,6 @@ function makeFolder(overrides: Partial<WorkflowFolder> & { id: string }): Workfl
     userId: 'user-1',
     workspaceId: 'ws-1',
     parentId: overrides.parentId ?? null,
-    color: '#000000',
-    isExpanded: false,
     locked: overrides.locked ?? false,
     sortOrder: 0,
     createdAt: new Date(0),
